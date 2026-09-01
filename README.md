@@ -613,3 +613,821 @@ with `make clean`.
 - [PM2 docs](https://pm2.keymetrics.io/docs/usage/quick-start/) — ecosystem + cluster
 - [NodeSource Node.js repo](https://github.com/nodesource/distributions) — how Node gets installed on the EC2
 - [Let's Encrypt / certbot](https://certbot.eff.org/) — HTTPS
+
+
+
+
+##### Complete Verification Plan
+01. EC2 & OS Verification
+02. Node.js Verification
+03. Project Structure Verification
+04. Microservice Port Verification
+05. Individual Service Health
+06. PM2 Process Management
+07. PM2 Ecosystem Configuration
+08. PM2 Auto-Restart / Crash Recovery
+09. Service Independence
+10. Service-to-Service Communication
+11. Nginx Installation & Status
+12. Nginx Reverse Proxy Configuration
+13. Nginx Routing Tests
+14. Public Port Security
+15. AWS Security Group Verification
+16. PM2 Logs
+17. Nginx Logs
+18. EC2 Reboot / Auto Startup
+19. End-to-End Testing
+20. HTTPS - Bonus
+21. PM2 Cluster - Bonus
+22. Zero/Minimal Downtime - Bonus
+
+
+
+### 01. EC2 & OS Verification
+Step name
+
+Verify EC2 instance and operating system
+
+Commands
+hostname
+hostname -I
+uname -a
+cat /etc/os-release
+
+ubuntu@ip-10-20-1-207:/$ cat /etc/os-release
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.4 LTS (Noble Numbat)"
+VERSION_CODENAME=noble
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=noble
+LOGO=ubuntu-logo
+
+
+### 02. Node.js Verification
+Step name
+
+Verify Node.js and npm
+
+node -v
+npm -v
+which node
+which npm
+
+
+
+### 03. Microservice Port Verification
+sudo ss -lntp | grep -E '3001|3002|3003'
+
+#### 04. Individual Service Health
+
+### User
+curl -i http://127.0.0.1:3001/health
+
+Expected:
+
+HTTP/1.1 200 OK
+
+#### Product
+curl -i http://127.0.0.1:3002/health
+
+Expected:
+HTTP/1.1 200 OK
+
+Order
+curl -i http://127.0.0.1:3003/health
+
+Expected:
+HTTP/1.1 200 OK
+
+
+### 05. PM2 Process Management
+pm2 list
+
+Expected:
+
+user-service       online
+product-service    online
+order-service      online
+
+
+#### Check individual PM2 process
+pm2 show user-service
+pm2 show product-service
+pm2 show order-service
+
+#### 06. PM2 Ecosystem Configuration
+
+Verify single ecosystem.config.js
+
+cd ~/microservices-nginx-pm2
+cat ecosystem.config.js
+
+Check that all three applications exist:
+
+user-service
+product-service
+order-service
+
+Also check:
+
+pm2 ecosystem
+
+```
+File /home/ubuntu/ecosystem.config.js generated
+```
+
+You can also run:
+
+grep -E "name:|script:|instances:|exec_mode:|autorestart:" ecosystem.config.js
+
+You want evidence that:
+
+✓ One ecosystem file
+✓ Three services defined
+✓ autorestart enabled
+
+#### 07. PM2 Auto-Restart / Crash Recovery
+Demonstrate PM2 crash recovery
+
+pm2 list
+
+pm2 pid user-service
+
+
+kill -9 12345
+
+pm2 list
+
+Wait:
+
+sleep 5
+
+### 08. Service Independence
+
+pm2 stop user-service
+
+Check:
+
+pm2 list
+
+Expected:
+
+user-service       stopped
+product-service    online
+order-service      online
+
+Test User:
+
+curl -i http://127.0.0.1:3001/health
+
+Expected failure.
+
+But Product:
+
+curl -i http://127.0.0.1:3002/health
+
+should return:
+
+200
+
+Order:
+
+curl -i http://127.0.0.1:3003/health
+
+should return:
+
+200
+
+Restart User:
+
+pm2 restart user-service
+
+Then:
+
+curl -i http://127.0.0.1:3001/health
+Requirement:
+✓ User failure doesn't stop Product
+✓ User failure doesn't stop Order
+
+You can repeat the same test with Product.
+
+----
+
+#### 09. Service-to-Service Communication
+Order Service communicating with Product Service.
+
+Step name
+
+Verify Order → Product communication
+
+First:
+
+curl -i http://127.0.0.1:3002/products/1
+
+Then:
+
+curl -i http://127.0.0.1:3003/orders/100
+
+Expected Order response should contain product information.
+
+Conceptually:
+
+Order Service
+     |
+     | HTTP request
+     ↓
+Product Service
+     |
+     ↓
+Product data
+     |
+     ↓
+Order Service
+
+#### Stronger test
+
+Stop Product:
+
+pm2 stop product-service
+
+Now:
+
+curl -i http://127.0.0.1:3003/orders/100
+
+You should get something like:
+
+HTTP/1.1 503 Service Unavailable
+
+with:
+
+{
+  "error": "Product service unavailable"
+}
+
+Now restart:
+
+pm2 restart product-service
+
+Test again:
+
+curl -i http://127.0.0.1:3003/orders/100
+
+Expected:
+
+200 OK
+
+This is a very good demonstration.
+
+
+----
+#### 11. Nginx Installation & Status
+Step name
+
+Verify Nginx is installed and running
+
+nginx -v
+
+Then:
+
+sudo systemctl status nginx
+
+Expected:
+
+Active: active (running)
+
+Also:
+
+sudo systemctl is-enabled nginx
+
+Expected:
+
+enabled
+
+This verifies Nginx starts after reboot.
+
+
+### 12. Nginx Reverse Proxy Configuration
+Step name
+
+Verify Nginx reverse proxy configuration
+
+Check:
+
+sudo nginx -t
+
+Expected:
+
+syntax is ok
+test is successful
+
+Then:
+
+sudo nginx -T
+
+Search for your routes:
+
+sudo nginx -T | grep -E "api/users|api/products|api/orders"
+
+You should see:
+
+/api/users/
+/api/products/
+/api/orders/
+
+
+#### 13. Nginx Routing Tests
+Verify URL-based routing through Nginx
+
+User
+curl -i http://127.0.0.1/api/users/health
+
+Expected:
+
+200 OK
+Product
+curl -i http://127.0.0.1/api/products/health
+
+Expected:
+
+200 OK
+Order
+curl -i http://127.0.0.1/api/orders/health
+
+Expected:
+
+200 OK
+
+
+---
+#### 14. Test from Your Laptop
+
+Now test the public API.
+
+Find EC2 public IP:
+
+curl http://checkip.amazonaws.com
+
+Or get it from AWS Console.
+
+From your laptop:
+
+curl -i http://EC2_PUBLIC_IP/api/users/health
+
+Then:
+
+curl -i http://EC2_PUBLIC_IP/api/products/health
+
+Then:
+
+curl -i http://EC2_PUBLIC_IP/api/orders/health
+
+Expected:
+
+200 OK
+
+This is more important than testing only from inside EC2 because it verifies:
+
+Internet
+   ↓
+AWS Security Group
+   ↓
+Nginx
+   ↓
+Microservice
+
+
+#### 15. Public Port Security Test
+Step name
+
+Verify microservice ports are not publicly accessible
+
+From your local laptop, run:
+
+nc -vz -w 5 EC2_PUBLIC_IP 3001
+nc -vz -w 5 EC2_PUBLIC_IP 3002
+nc -vz -w 5 EC2_PUBLIC_IP 3003
+
+
+#### 16. AWS Security Group Verification
+Step name
+
+Verify EC2 Security Group rules
+
+Your inbound rules should approximately be:
+
+SSH     22     YOUR_IP/32
+HTTP    80     0.0.0.0/0
+HTTPS   443    0.0.0.0/0   (if HTTPS configured)
+
+There should NOT be public rules:
+
+3001
+3002
+3003
+
+
+---
+#### 17. PM2 Logs
+
+Verify PM2 application logs
+
+Run: pm2 logs
+
+Or:
+pm2 logs user-service
+pm2 logs product-service
+pm2 logs order-service
+
+Check log files:
+
+pm2 show user-service
+
+Look for:
+
+out log path
+error log path
+
+Then:
+
+tail -f ~/microservices-nginx-pm2/logs/user-out.log
+
+Generate request:
+
+curl http://127.0.0.1:3001/health
+
+
+
+---------
+#### 18. Nginx Logs
+Step name
+
+Verify Nginx access and error logs
+
+Check:
+
+sudo ls -lh /var/log/nginx/
+
+If using custom logs:
+
+sudo tail -f /var/log/nginx/microservices_access.log
+
+Then from another terminal:
+
+curl http://127.0.0.1/api/users/health
+
+You should see the request in the Nginx access log.
+
+Error log
+sudo tail -f /var/log/nginx/microservices_error.log
+
+For the default logs:
+
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+
+
+---------
+
+#### 19. Demonstrate Nginx 502
+
+This is a very useful DevOps demonstration.
+
+Step name
+
+Verify Nginx handles backend failure
+
+Stop Product:
+
+pm2 stop product-service
+
+Now:
+
+curl -i http://127.0.0.1/api/products/health
+
+Expected:
+
+502 Bad Gateway
+
+Then inspect:
+
+sudo tail -20 /var/log/nginx/microservices_error.log
+
+Now:
+
+pm2 restart product-service
+
+Test:
+
+curl -i http://127.0.0.1/api/products/health
+
+Expected:
+
+200 OK
+
+This demonstrates:
+
+Nginx
+  ↓
+Product Service unavailable
+  ↓
+502
+
+
+---------
+#### 20. EC2 Reboot Test
+
+This is another major requirement.
+
+Step name
+
+Verify automatic service startup after EC2 reboot
+
+Before reboot:
+
+pm2 list
+
+and:
+
+sudo systemctl is-enabled nginx
+
+Then:
+
+pm2 save
+
+Verify PM2 startup configuration:
+
+pm2 startup
+
+If PM2 prints a sudo ... command, make sure you already executed that command.
+
+Then:
+
+sudo reboot
+
+Wait for EC2 to come back.
+
+SSH again:
+
+ssh -i YOUR_KEY.pem ubuntu@EC2_PUBLIC_IP
+
+Check:
+
+pm2 list
+
+Expected:
+
+user-service       online
+product-service    online
+order-service      online
+
+Check Nginx:
+
+sudo systemctl status nginx
+
+Expected:
+
+active (running)
+End-to-end after reboot
+curl -i http://127.0.0.1/api/users/health
+curl -i http://127.0.0.1/api/products/health
+curl -i http://127.0.0.1/api/orders/health
+
+Then from laptop:
+
+curl -i http://EC2_PUBLIC_IP/api/users/health
+
+If all work:
+
+✓ PM2 survives reboot
+✓ Nginx survives reboot
+✓ All services automatically start
+✓ API is available
+
+
+----
+----
+
+#### 20. EC2 Reboot Test
+
+This is another major requirement.
+
+Step name
+
+Verify automatic service startup after EC2 reboot
+
+Before reboot:
+
+pm2 list
+
+and:
+
+sudo systemctl is-enabled nginx
+
+Then:
+
+pm2 save
+
+Verify PM2 startup configuration:
+
+pm2 startup
+
+If PM2 prints a sudo ... command, make sure you already executed that command.
+
+Then:
+
+sudo reboot
+
+Wait for EC2 to come back.
+
+SSH again:
+
+ssh -i YOUR_KEY.pem ubuntu@EC2_PUBLIC_IP
+
+Check:
+
+pm2 list
+
+Expected:
+
+user-service       online
+product-service    online
+order-service      online
+
+Check Nginx:
+
+sudo systemctl status nginx
+
+Expected:
+
+active (running)
+End-to-end after reboot
+curl -i http://127.0.0.1/api/users/health
+curl -i http://127.0.0.1/api/products/health
+curl -i http://127.0.0.1/api/orders/health
+
+Then from laptop:
+
+curl -i http://EC2_PUBLIC_IP/api/users/health
+
+If all work:
+
+✓ PM2 survives reboot
+✓ Nginx survives reboot
+✓ All services automatically start
+✓ API is available
+
+
+
+------
+---------
+
+#### 21. Complete End-to-End Test
+
+Now perform the final demo.
+
+From your laptop:
+
+curl -i http://EC2_PUBLIC_IP/api/users/health
+curl -i http://EC2_PUBLIC_IP/api/products/health
+curl -i http://EC2_PUBLIC_IP/api/orders/health
+
+Then:
+
+curl -i http://EC2_PUBLIC_IP/api/users/users
+curl -i http://EC2_PUBLIC_IP/api/products/products
+curl -i http://EC2_PUBLIC_IP/api/orders/orders
+
+Then service communication:
+
+curl -i http://EC2_PUBLIC_IP/api/orders/100
+
+Expected flow:
+
+Laptop
+   |
+   | GET /api/orders/100
+   ↓
+Nginx
+   |
+   | :3003
+   ↓
+Order Service
+   |
+   | HTTP :3002
+   ↓
+Product Service
+   |
+   ↓
+Product information
+   |
+   ↓
+Order Service
+   |
+   ↓
+Nginx
+   |
+   ↓
+Laptop
+
+
+#### 22. Bonus — HTTPS
+
+Only start this after HTTP is completely working.
+
+You need:
+
+Domain
+   ↓
+DNS
+   ↓
+EC2 Public IP
+   ↓
+Nginx
+   ↓
+Let's Encrypt
+
+Then install Certbot:
+
+sudo apt install certbot python3-certbot-nginx -y
+
+Then:
+
+sudo certbot --nginx
+
+Verify:
+
+sudo nginx -t
+
+Then:
+
+curl -I https://your-domain.com
+
+Check certificate:
+
+sudo certbot certificates
+
+Test renewal:
+
+sudo certbot renew --dry-run
+
+
+#### 23. Bonus — PM2 Cluster
+
+After the basic deployment is stable, configure something like:
+
+{
+  name: "user-service",
+  script: "./services/user-service/server.js",
+  instances: 2,
+  exec_mode: "cluster",
+  autorestart: true
+}
+
+Then:
+
+pm2 delete user-service
+
+Start:
+
+pm2 start ecosystem.config.js --only user-service
+
+Check:
+
+pm2 list
+
+You should see two workers.
+
+##### 24. Bonus — Demonstrate PM2 Reload
+
+Run:
+
+pm2 reload user-service
+
+Then:
+
+pm2 list
+
+Check:
+
+pm2 logs user-service
+
+For a stronger demonstration, continuously send requests:
+
+while true; do
+    curl -s http://127.0.0.1/api/users/health
+    echo
+    sleep 0.2
+done
+
+In another terminal:
+
+pm2 reload user-service
+
+
