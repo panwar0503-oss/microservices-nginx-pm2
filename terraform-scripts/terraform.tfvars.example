@@ -1,0 +1,44 @@
+##############################################################################
+# terraform.tfvars.example
+#
+# Copy to terraform.tfvars (gitignored) and set ssh_cidr. Prefer editing
+# environments/<env>.tfvars and passing it with -var-file=... at plan time.
+##############################################################################
+
+# --- Project ---------------------------------------------------------------
+
+project_name = "microservices"
+environment  = "dev"
+
+# --- AWS -------------------------------------------------------------------
+
+aws_profile = "aws-dharmendra"
+aws_region  = "ap-south-1"
+
+# --- Networking ------------------------------------------------------------
+
+vpc_cidr            = "10.20.0.0/16"
+public_subnet_cidrs = ["10.20.1.0/24", "10.20.2.0/24"] # >=2 for multi-AZ
+# private_subnet_cidr = "10.20.10.0/24"  # disabled — see modules/vpc/main.tf
+
+# --- Security --------------------------------------------------------------
+
+# REQUIRED. Your public IP as /32. Find it with: curl -s https://checkip.amazonaws.com
+# Never set this to 0.0.0.0/0.
+ssh_cidr = "203.0.113.5/32"
+
+http_enabled = true
+
+# --- EC2 -------------------------------------------------------------------
+
+instance_type     = "t3.micro"
+root_volume_size  = 12
+node_version      = "20"
+attach_elastic_ip = true
+
+# --- Tags ------------------------------------------------------------------
+
+tags = {
+  CostCenter = "Learning"
+  Owner      = "dharmendra"
+}

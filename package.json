@@ -1,0 +1,13 @@
+{
+  "name": "microservices-nginx-pm2",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js microservices with PM2 and Nginx on AWS EC2 — learning project",
+  "scripts": {
+    "install:all": "npm install --prefix services/user-service && npm install --prefix services/product-service && npm install --prefix services/order-service",
+    "start:user": "node services/user-service/server.js",
+    "start:product": "node services/product-service/server.js",
+    "start:order": "node services/order-service/server.js"
+  },
+  "author": "dharmendra.singh@napses.com"
+}

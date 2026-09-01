@@ -1,0 +1,45 @@
+################################################################################
+# Terraform
+################################################################################
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# tfvars can carry secrets or per-user values - keep them local
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+!environments/*.tfvars
+
+# Plan files and crash logs
+*.tfplan
+crash.log
+crash.*.log
+
+# Override files (per-user local overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+################################################################################
+# Runtime artefacts produced by deploy.sh
+################################################################################
+logs/
+plans/
+state-backups/
+*.log
+
+################################################################################
+# Generated key material
+################################################################################
+*.pem
+keys/
+
+################################################################################
+# Editor / OS
+################################################################################
+.DS_Store
+.idea/
+.vscode/
